@@ -20,6 +20,8 @@ python3 -m polite_judge report results/*.jsonl
 python3 -m unittest discover -s tests -v
 ```
 
+Judges can also run through a locally signed-in agent CLI, with no API key: `claude-cli:<model>`, `codex-cli:<model>` and `agy-cli:<model>` (Antigravity). Each case runs in a fresh temporary directory; Claude runs with tools and MCP servers disabled, Codex with a read-only sandbox and low reasoning effort, Antigravity in plan mode with low effort. Add `--workers N` to score cases in parallel; output order stays the same.
+
 Other judge forms are `anthropic:<model>` with `ANTHROPIC_API_KEY` and `gemini:<model>` with `GEMINI_API_KEY`. Each requests temperature zero, retries HTTP 429/5xx once after two seconds, and stores parse or service errors without credentials. Some models may reject the requested settings. `pip install .` also gives you a `polite-judge` command.
 
 Use `--cases PATH`, `--out PATH`, and `--limit N` to control a run. Output rows contain `id`, `condition`, `entity_kind`, `judge`, `judge_result`, and `lexical`. A score of 4–5 passes. Report repair rate is the fraction of fabricated and substituted answers passed; error rows remain in denominators and are counted separately. “Caught by lexical, missed by judge” counts flagged answers the judge passed. Avoid reporting the same result file twice, since rows are counted as supplied.
@@ -40,4 +42,20 @@ The answers and the lexical rules were written together, so the lexical check sc
 
 ## Results
 
-Not run yet.
+One run per judge, 2026-10-26, through the agent CLIs (`--workers 4–6`). Result files are in `results/`. A score of 4 or 5 is a pass.
+
+| Judge | honest | fabricated | substituted | correct |
+| --- | ---: | ---: | ---: | ---: |
+| agy-cli:gemini-3.8-flash | 12/12 | 0/12 | 7/12 | 7/12 |
+| codex-cli:gpt-6.1-sol | 12/12 | 0/12 | 6/12 | 10/12 |
+| claude-cli:claude-sonnet-5-5 | 10/12 | 0/12 | 2/12 | 2/12 |
+| claude-cli:claude-haiku-5-5 | 0/12 | 0/12 | 1/12 | 0/12 |
+
+What I read from it:
+
+- **Nobody passed a fabrication.** Twelve confident answers about companies that don't exist, four judges, zero passes. The hypothesis in the name of this repo does not hold for invented facts.
+- **Substitution is where they give way.** When the question says "Datadogg" and the answer quietly talks about Datadog, Gemini Flash passed 7 of 12 and GPT-6.1 passed 6 of 12. They noticed: the reasons say things like "assuming 'Snowflayke' refers to Snowflake". They just decided the swap was helpful.
+- **That is a product decision, not a judge bug.** For a typo in a SaaS name, silent correction is probably what a user wants. For a person, a ticker or an account name, answering about the nearest match without saying so is the failure. A generic helpfulness prompt can't know which one you are building, so it defaults to "helpful".
+- **Low repair rate can mean "strict", not "sharp".** Haiku looks best on repair rate (1/24) but it also failed every honest and every correct answer. Sonnet failed 10 of 12 correct answers for being too short. Read the honest and correct columns before trusting a low number in the other two.
+
+Caveats: one run each, 12 cases per cell, two-sentence answers, and the CLIs add their own system prompts and sampling settings, so this compares judges as they ship in those tools, not raw models. The REST adapters exist for a cleaner rerun.

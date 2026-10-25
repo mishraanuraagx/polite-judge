@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -119,11 +121,79 @@ class GeminiJudge(RESTJudge):
         return "".join(part.get("text", "") for part in payload["candidates"][0]["content"]["parts"])
 
 
+class CLIJudge:
+    """Scores through a locally signed-in agent CLI instead of an API key.
+
+    These harnesses add their own system prompt and sampling settings, so results
+    are labelled by CLI and are not directly comparable with the REST judges.
+    """
+    cli = ""
+    timeout = 180
+
+    def __init__(self, model):
+        if not model.strip():
+            raise ValueError("model must not be empty")
+        self.model = model
+        self.name = self.cli + ":" + model
+
+    def score(self, question, answer):
+        prompt = judge_prompt(question, answer)
+        with tempfile.TemporaryDirectory(prefix="polite-judge-") as workdir:
+            for attempt in range(2):
+                try:
+                    done = subprocess.run(self.argv(prompt, workdir), cwd=workdir, capture_output=True,
+                                          text=True, timeout=self.timeout, stdin=subprocess.DEVNULL)
+                except (OSError, subprocess.TimeoutExpired):
+                    reply = None
+                else:
+                    reply = self.reply(done, workdir) if done.returncode == 0 else None
+                if reply:
+                    return parse_reply(reply)
+            return error_result("No usable reply from " + self.cli)
+
+    def reply(self, done, workdir):
+        return done.stdout
+
+
+class ClaudeCLIJudge(CLIJudge):
+    cli = "claude-cli"
+
+    def argv(self, prompt, workdir):
+        return ["claude", "-p", prompt, "--model", self.model,
+                "--system-prompt", "Follow the user's instructions exactly.", "--output-format", "text",
+                "--tools", "", "--strict-mcp-config", "--no-session-persistence"]
+
+
+class CodexCLIJudge(CLIJudge):
+    cli = "codex-cli"
+
+    def argv(self, prompt, workdir):
+        return ["codex", "exec", "--ephemeral", "--skip-git-repo-check", "-s", "read-only", "-C", workdir,
+                "-m", self.model, "-c", "model_reasoning_effort=low",
+                "-o", os.path.join(workdir, "reply.txt"), prompt]
+
+    def reply(self, done, workdir):
+        try:
+            with open(os.path.join(workdir, "reply.txt"), encoding="utf-8") as stream:
+                return stream.read()
+        except OSError:
+            return None
+
+
+class AntigravityCLIJudge(CLIJudge):
+    cli = "agy-cli"
+
+    def argv(self, prompt, workdir):
+        return ["agy", "-p", prompt, "--model", self.model, "--effort", "low", "--mode", "plan",
+                "--sandbox", "--disable-slash-commands"]
+
+
 def make_judge(spec):
     if spec == "mock":
         return MockJudge()
     provider, separator, model = spec.partition(":")
-    classes = {"openai": OpenAIJudge, "anthropic": AnthropicJudge, "gemini": GeminiJudge}
+    classes = {"openai": OpenAIJudge, "anthropic": AnthropicJudge, "gemini": GeminiJudge,
+               "claude-cli": ClaudeCLIJudge, "codex-cli": CodexCLIJudge, "agy-cli": AntigravityCLIJudge}
     if not separator or provider not in classes or not model.strip():
-        raise ValueError("judge must be mock, openai:<model>, anthropic:<model>, or gemini:<model>")
+        raise ValueError("judge must be mock, openai|anthropic|gemini:<model>, or claude-cli|codex-cli|agy-cli:<model>")
     return classes[provider](model)

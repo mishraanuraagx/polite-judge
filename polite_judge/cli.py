@@ -28,6 +28,7 @@ def main(argv=None):
     run_parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)
     run_parser.add_argument("--out", type=Path)
     run_parser.add_argument("--limit", type=positive_int)
+    run_parser.add_argument("--workers", type=positive_int, default=1)
     report_parser = commands.add_parser("report", help="print a markdown report")
     report_parser.add_argument("results", nargs="+")
     check_parser = commands.add_parser("check", help="validate dataset and run lexical checks")
@@ -44,7 +45,7 @@ def main(argv=None):
             if getattr(judge, "key_variable", None) and not os.environ.get(judge.key_variable):
                 raise ValueError("Missing " + judge.key_variable)
             out = args.out or Path("results") / (re.sub(r"[^A-Za-z0-9._-]+", "_", judge.name) + ".jsonl")
-            count = run(judge, args.cases, out, args.limit)
+            count = run(judge, args.cases, out, args.limit, args.workers)
             print("Wrote {} results to {}".format(count, out))
         else:
             print(markdown_report(load_results(args.results)))

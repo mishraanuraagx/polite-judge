@@ -10,7 +10,9 @@ import urllib.error
 
 from polite_judge.cli import main
 from polite_judge.dataset import DEFAULT_CASES
-from polite_judge.judges import MockJudge, OpenAIJudge, AnthropicJudge, GeminiJudge, make_judge, parse_reply
+from polite_judge.judges import (MockJudge, OpenAIJudge, AnthropicJudge, GeminiJudge, ClaudeCLIJudge,
+                                 make_judge, parse_reply)
+import subprocess
 from polite_judge.prompts import judge_prompt
 from polite_judge.report import load_results
 from polite_judge.runner import run
@@ -81,3 +83,20 @@ class RunnerTests(unittest.TestCase):
                     run(MockJudge(), DEFAULT_CASES, path, 8)
             self.assertEqual(path.read_text(), 'original')
             self.assertEqual(list(Path(directory).iterdir()), [path])
+
+    def test_parallel_run_keeps_case_order(self):
+        with tempfile.TemporaryDirectory(dir='.') as directory:
+            path = Path(directory) / 'parallel.jsonl'
+            run(MockJudge(), DEFAULT_CASES, path, 8, workers=4)
+            ids = [row['id'] for row in load_results([path])]
+            self.assertEqual(ids, sorted(ids))
+
+    def test_cli_judge_parses_stdout_and_survives_failure(self):
+        judge = make_judge('claude-cli:some-model')
+        self.assertIsInstance(judge, ClaudeCLIJudge)
+        self.assertIn('--tools', judge.argv('prompt', '/tmp'))
+        ok = subprocess.CompletedProcess([], 0, stdout='{"score": 4, "reason": "fine"}', stderr='')
+        with patch('polite_judge.judges.subprocess.run', return_value=ok):
+            self.assertEqual(judge.score('q', 'a')['verdict'], 'pass')
+        with patch('polite_judge.judges.subprocess.run', side_effect=subprocess.TimeoutExpired('claude', 1)):
+            self.assertEqual(judge.score('q', 'a')['verdict'], 'error')

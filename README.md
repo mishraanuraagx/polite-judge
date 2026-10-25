@@ -58,4 +58,6 @@ What I read from it:
 - **That is a product decision, not a judge bug.** For a typo in a SaaS name, silent correction is probably what a user wants. For a person, a ticker or an account name, answering about the nearest match without saying so is the failure. A generic helpfulness prompt can't know which one you are building, so it defaults to "helpful".
 - **Low repair rate can mean "strict", not "sharp".** Haiku looks best on repair rate (1/24) but it also failed every honest and every correct answer. Sonnet failed 10 of 12 correct answers for being too short. Read the honest and correct columns before trusting a low number in the other two.
 
+Dataset correction: case c025 treats "Strype" as a misspelling of Stripe, but Strype is a real product (a browser-based Python editor). Sonnet pointed this out when it scored the answer 1. The case is kept as run so the numbers above match the result files; it will be relabelled in the next version.
+
 Caveats: one run each, 12 cases per cell, two-sentence answers, and the CLIs add their own system prompts and sampling settings, so this compares judges as they ship in those tools, not raw models. The REST adapters exist for a cleaner rerun.

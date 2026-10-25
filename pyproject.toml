@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "polite-judge"
+version = "0.1.0"
+description = "A reproducible experiment in entity handling by LLM judges"
+requires-python = ">=3.9"
+dependencies = []
+license = {text = "MIT"}
+authors = [{name = "Anuraag Mishra"}]
+
+[project.scripts]
+polite-judge = "polite_judge.cli:main"
+
+[tool.setuptools]
+packages = ["polite_judge"]
